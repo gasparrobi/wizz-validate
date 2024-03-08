@@ -1,7 +1,5 @@
 <script setup lang="ts">
 import { reactive, computed } from "vue";
-import { useValidation } from "wizz-validate";
-import { type ZodSchema, z } from "zod";
 import {
   Card,
   CardContent,
@@ -21,62 +19,46 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import Switch from "@/components/ui/switch/Switch.vue";
-import { useToast } from "@/components/ui/toast/use-toast";
-
-const { toast } = useToast();
+import { provide, ref } from "vue";
+import { cn } from "@/lib/utils";
 
 const form = reactive({
-  name: "",
+  firstName: "",
+  lastName: "",
   email: "",
   userName: "",
   framework: "",
-  isFrameworkRequired: false,
+  isFrameworkRequired: true,
   address: {
     street: "",
     city: "",
   },
 });
 
-const validationSchema = computed<ZodSchema>(() =>
-  z.object({
-    name: z.string().min(1, "The name field is required"),
-    email: z.string().email("Please enter a valid email"),
-    userName: z.string().min(1, "The username field is required"),
-    ...(form.isFrameworkRequired && {
-      framework: z.string().min(1, "Please select Framework"),
-    }),
-    address: z.object({
-      street: z.string().min(1, "The street field is required"),
-      city: z.string().min(1, "The city field is required"),
-    }),
-  })
-);
+const isSubmitted = ref(false);
+provide("isSubmitted", isSubmitted);
 
-const {
-  errors,
-  getErrorMessage,
-  hasError,
-  clearErrors,
-  validate,
-  externalErrors,
-  scrollToFirstError,
-} = useValidation(validationSchema, form);
+function onSubmit(event: Event) {
+  event.preventDefault();
+  isSubmitted.value = true;
 
-async function onValidate() {
-  const result = await validate();
-  if (!result) return scrollToFirstError({ offset: 40 });
-  try {
-    await externalAsyncData();
-  } catch (error) {
-    return externalErrors("userName", error);
+  const isValid = event.target.checkValidity();
+
+  if (!isValid) {
+    const form = new FormData(event.target as HTMLFormElement);
+
+    for (const element of Array.from(form.entries())) {
+      const formElement = event.target[element[0] as any];
+      if (formElement instanceof HTMLElement) {
+        if (formElement.checkValidity() === false) {
+          formElement.scrollIntoView({ behavior: "smooth", block: "center" });
+          break;
+        }
+      }
+    }
+
+    return;
   }
-  toast({
-    title: "Register Success",
-  });
-}
-
-function onReset() {
-  clearErrors();
 }
 
 function externalAsyncData() {
@@ -92,58 +74,58 @@ function externalAsyncData() {
       <CardTitle>Registration</CardTitle>
       <CardDescription>Register user </CardDescription>
     </CardHeader>
-    <CardContent>
-      <form>
+    <form @submit.prevent="onSubmit" novalidate>
+      <CardContent>
         <div class="grid items-center w-full gap-4">
-          <section class="flex flex-col space-y-1.5">
-            <Label for="name" :class="{ 'text-red-500 ': hasError('name') }"
-              >Name</Label
-            >
+          <section class="flex flex-col space-y-1.5 group">
             <Input
-              id="name"
-              data-wv-name="name"
-              v-model="form.name"
-              placeholder="Name of your project"
-              :class="{ 'border-red-500 bg-red-50': hasError('name') }"
+              id="first-name"
+              name="first-name"
+              label="First Name"
+              v-model="form.firstName"
+              placeholder="First Name"
+              required
+              pattern="^[\w\s]+$"
+              error-message="The first name field is required"
             />
-            <div v-if="hasError('name')" class="text-red-500 text-xs">
-              {{ getErrorMessage("name") }}
-            </div>
           </section>
 
-          <section class="flex flex-col space-y-1.5">
-            <Label for="email" :class="{ 'text-red-500 ': hasError('name') }"
-              >E-mail</Label
-            >
+          <section class="flex flex-col space-y-1.5 group">
+            <Input
+              id="last-name"
+              name="last-name"
+              label="Last Name"
+              v-model="form.lastName"
+              placeholder="Last Name"
+              required
+              pattern="^[\w\s]+$"
+              error-message="The last name field is required"
+            />
+          </section>
+
+          <section class="flex flex-col space-y-1.5 group">
             <Input
               id="email"
-              data-wv-name="email"
+              name="email"
+              type="email"
+              label="E-mail"
               v-model="form.email"
               placeholder="E-mail"
-              :class="{ 'border-red-500 bg-red-50': hasError('email') }"
+              required
+              error-message="Please enter a valid email"
             />
-            <div v-if="hasError('email')" class="text-red-500 text-xs">
-              {{ getErrorMessage("email") }}
-            </div>
           </section>
 
-          <section class="flex flex-col space-y-1.5">
-            <Label
-              for="user-name"
-              :class="{ 'text-red-500 ': hasError('userName') }"
-              >User Name</Label
-            >
+          <section class="flex flex-col space-y-1.5 group">
             <Input
               id="user-name"
+              name="user-name"
+              label="User Name"
               v-model="form.userName"
               placeholder="User Name"
-              :class="{
-                'border-red-500 bg-red-50': hasError('userName'),
-              }"
+              required
+              error-message="The username field is required"
             />
-            <div v-if="hasError('userName')" class="text-red-500 text-xs">
-              {{ getErrorMessage("userName") }}
-            </div>
           </section>
 
           <section class="flex items-center space-x-2">
@@ -152,20 +134,21 @@ function externalAsyncData() {
               v-model:checked="form.isFrameworkRequired"
             >
             </Switch>
-            <Label for="framework-required">Framework Requierd</Label>
+            <Label for="framework-required">Framework Required</Label>
           </section>
 
-          <section class="flex flex-col space-y-1.5">
-            <Label
-              for="framework"
-              :class="{ 'text-red-500': hasError('framework') }"
-              >Framework</Label
+          <section class="flex flex-col space-y-1.5 group">
+            <Select
+              v-model="form.framework"
+              :required="form.isFrameworkRequired"
+              error-message="Please select Framework"
             >
-            <Select v-model="form.framework">
               <SelectTrigger
                 id="framework"
+                label="Framework"
                 :class="{
-                  'border-red-500 bg-red-50': hasError('framework'),
+                  'group-[:has(:invalid)]:border-red-500 group-[:has(:invalid)]:bg-red-50':
+                    isSubmitted,
                 }"
               >
                 <SelectValue placeholder="Select" />
@@ -177,58 +160,40 @@ function externalAsyncData() {
                 <SelectItem value="astro"> Astro </SelectItem>
               </SelectContent>
             </Select>
-            <div v-if="hasError('framework')" class="text-red-500 text-xs">
-              {{ getErrorMessage("framework") }}
-            </div>
           </section>
 
           <h2 class="text-md font-bold">Address</h2>
-          <section class="flex flex-col space-y-1.5">
-            <Label
-              for="street"
-              :class="{ 'text-red-500 ': hasError('address.street') }"
-              >Street</Label
-            >
+          <section class="flex flex-col space-y-1.5 group">
             <Input
               id="street"
-              data-wv-name="address-street"
+              name="street"
+              label="Street"
               v-model="form.address.street"
+              required
               placeholder="Street"
-              :class="{
-                'border-red-500 bg-red-50': hasError('address.street'),
-              }"
+              error-message="The street field is required"
             />
-            <div v-if="hasError('address.street')" class="text-red-500 text-xs">
-              {{ getErrorMessage("address.street") }}
-            </div>
           </section>
 
-          <section class="flex flex-col space-y-1.5">
-            <Label
-              for="city"
-              :class="{ 'text-red-500 ': hasError('address.city') }"
-              >City</Label
-            >
+          <section class="flex flex-col space-y-1.5 group">
             <Input
               id="city"
-              data-wv-name="address-city"
+              name="city"
+              label="City"
               v-model="form.address.city"
               placeholder="City"
-              :class="{ 'border-red-500 bg-red-50': hasError('address.city') }"
+              required
+              error-message="The city field is required"
             />
-            <div v-if="hasError('address.city')" class="text-red-500 text-xs">
-              {{ getErrorMessage("address.city") }}
-            </div>
           </section>
         </div>
-      </form>
-    </CardContent>
-    <CardFooter class="flex justify-between px-6 pb-6">
-      <Button variant="outline" @click="onReset"> Reset </Button>
-      <Button @click="onValidate">Register</Button>
-    </CardFooter>
+      </CardContent>
+      <CardFooter class="flex justify-end py-6">
+        <!-- <Button @click="onValidate">Register</Button> -->
+        <Button type="submit">Register</Button>
+      </CardFooter>
+    </form>
   </Card>
 
   <pre>{{ form }}</pre>
-  <pre>{{ errors }}</pre>
 </template>
